@@ -9,10 +9,10 @@
 # ------------
 # The script uses the following environment variables:
 # - GITHUB_TOKEN: Your GitHub Personal Access Token
-#   (you can set this in your ~/.zshrc or ~/.bash_profile)
-#   export GITHUB_TOKEN="your-token-here"
-# 
-# OR it will look for a token in ~/.github/token
+#   Can be provided in one of these ways:
+#   1. As an environment variable: export GITHUB_TOKEN="your-token-here"
+#   2. In the project's .env file as GITHUB_TOKEN=your-token-here
+#   3. In a file at ~/.github/token
 
 # Function to display usage information
 show_usage() {
@@ -86,14 +86,27 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Get GitHub token
+# Get GitHub token - with added .env file support
 if [ -z "$GITHUB_TOKEN" ]; then
-  if [ -f "$HOME/.github/token" ]; then
+  # Check for token in .env file
+  if [ -f ".env" ]; then
+    ENV_TOKEN=$(grep -E "^GITHUB_TOKEN=.+" .env | cut -d'=' -f2-)
+    if [ ! -z "$ENV_TOKEN" ]; then
+      GITHUB_TOKEN=$ENV_TOKEN
+    fi
+  fi
+  
+  # If still not found, check ~/.github/token
+  if [ -z "$GITHUB_TOKEN" ] && [ -f "$HOME/.github/token" ]; then
     GITHUB_TOKEN=$(cat "$HOME/.github/token")
-  else
+  fi
+  
+  # If still not found, show error
+  if [ -z "$GITHUB_TOKEN" ]; then
     echo "No GitHub token found. Please either:"
     echo "1. Set the GITHUB_TOKEN environment variable"
-    echo "2. Create a file at ~/.github/token containing your token"
+    echo "2. Add GITHUB_TOKEN to the project's .env file"
+    echo "3. Create a file at ~/.github/token containing your token"
     exit 1
   fi
 fi

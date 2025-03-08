@@ -12,6 +12,7 @@ A flexible script for creating pull requests from the command line.
 
 1. Provide your GitHub token in one of these ways:
    - Set an environment variable: `export GITHUB_TOKEN="your-token-here"`
+   - Add to your project's `.env` file: `GITHUB_TOKEN=your-token-here`
    - Create a file at `~/.github/token` containing just your token
 
 #### Usage
