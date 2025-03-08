@@ -1,0 +1,2 @@
+# Ignore Cypress configuration files
+cypress.config.cjs 
