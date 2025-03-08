@@ -1,0 +1,30 @@
+name: Vercel Production Deployment
+
+# Only trigger this workflow on main branch and after tests pass
+on:
+  workflow_run:
+    workflows: ["Mekanik CI/CD"]
+    branches: [main]
+    types:
+      - completed
+
+jobs:
+  deploy-production:
+    # Only run if the CI/CD workflow was successful
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        
+      # Deploy to Vercel
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-comment: true
+          vercel-args: '--prod' 
