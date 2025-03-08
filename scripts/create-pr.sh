@@ -164,21 +164,59 @@ RESPONSE=$(curl -s -X POST \
   -d "$JSON_DATA" \
   https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/pulls)
 
-# Check if there was an error
-if [[ $RESPONSE == *"message"* && $RESPONSE == *"error"* ]]; then
+# Improved response parsing
+# First check for error message in response
+if [[ $RESPONSE == *"\"message\""* && $RESPONSE == *"\"error\""* ]]; then
   echo "Error creating PR:"
   echo $RESPONSE | grep -o '"message":"[^"]*"' | cut -d'"' -f4
   exit 1
 fi
 
-# Extract PR URL and number
-PR_URL=$(echo $RESPONSE | grep -o '"html_url":"[^"]*"' | grep "/pull/" | head -1 | cut -d'"' -f4)
-PR_NUMBER=$(echo $RESPONSE | grep -o '"number":[0-9]*' | head -1 | cut -d':' -f2)
+# Try to extract PR URL using different methods
+PR_URL=""
+PR_NUMBER=""
+
+# Method 1: Try jq if available
+if command -v jq &> /dev/null; then
+  PR_URL=$(echo $RESPONSE | jq -r .html_url)
+  PR_NUMBER=$(echo $RESPONSE | jq -r .number)
+else
+  # Method 2: Try simple grep with various patterns that might match
+  PR_URL=$(echo $RESPONSE | grep -o '"html_url":"[^"]*"' | grep "/pull/" | head -1 | cut -d'"' -f4)
+  if [ -z "$PR_URL" ]; then
+    PR_URL=$(echo $RESPONSE | grep -o "https://github.com/$REPO_OWNER/$REPO_NAME/pull/[0-9]*")
+  fi
+  
+  # Try to extract PR number
+  PR_NUMBER=$(echo $RESPONSE | grep -o '"number":[0-9]*' | head -1 | cut -d':' -f2)
+  if [ -z "$PR_NUMBER" ]; then
+    PR_NUMBER=$(echo $PR_URL | grep -o "/pull/[0-9]*" | cut -d'/' -f3)
+  fi
+fi
+
+# If we still failed to extract, try a fallback approach
+if [ -z "$PR_URL" ]; then
+  # Try to find the most recently created PR and assume it's ours
+  LATEST_PR=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+    "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/pulls?head=$REPO_OWNER:$HEAD_BRANCH&base=$BASE_BRANCH")
+  
+  if command -v jq &> /dev/null; then
+    PR_URL=$(echo $LATEST_PR | jq -r '.[0].html_url')
+    PR_NUMBER=$(echo $LATEST_PR | jq -r '.[0].number')
+  else
+    PR_URL=$(echo $LATEST_PR | grep -o '"html_url":"[^"]*"' | grep "/pull/" | head -1 | cut -d'"' -f4)
+    PR_NUMBER=$(echo $LATEST_PR | grep -o '"number":[0-9]*' | head -1 | cut -d':' -f2)
+  fi
+fi
 
 if [ -z "$PR_URL" ]; then
-  echo "Error: Could not create PR or extract PR URL from response."
-  echo "API Response:"
-  echo $RESPONSE
+  echo "Error: Could not determine PR URL from response."
+  echo "However, the PR may have been created successfully."
+  echo "Check your GitHub repository for new pull requests."
+  
+  # Print a truncated version of the response for debugging
+  echo "API Response (truncated):"
+  echo "${RESPONSE:0:500}..."
   exit 1
 fi
 
@@ -189,9 +227,9 @@ echo "PR URL: $PR_URL"
 if [ "$OPEN_IN_BROWSER" = true ]; then
   echo "Opening PR in browser..."
   if [[ "$OSTYPE" == "darwin"* ]]; then
-    open $PR_URL
+    open "$PR_URL"
   elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    xdg-open $PR_URL
+    xdg-open "$PR_URL"
   else
     echo "Could not open browser automatically on this OS."
     echo "Please open the URL manually."
